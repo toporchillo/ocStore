@@ -570,6 +570,17 @@ class ControllerCommonColumnLeft extends Controller {
 					'children' => $localisation	
 				);
 			}
+			
+			// Tools	
+			$maintenance = array();
+						
+			if ($this->user->hasPermission('access', 'tool/log')) {
+				$maintenance[] = array(
+					'name'	   => $this->language->get('text_log'),
+					'href'     => $this->url->link('tool/log', 'user_token=' . $this->session->data['user_token'], true),
+					'children' => array()		
+				);
+			}
 		
 			if ($maintenance) {
 				$system[] = array(
