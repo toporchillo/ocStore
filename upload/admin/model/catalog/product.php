@@ -1,7 +1,7 @@
 <?php
 class ModelCatalogProduct extends Model {
 	public function addProduct($data) {
-		$this->db->query("INSERT INTO " . DB_PREFIX . "product SET model = '" . $this->db->escape($data['model']) . "', sku = '" . $this->db->escape($data['sku']) . "', upc = '" . $this->db->escape($data['upc']) . "', ean = '" . $this->db->escape($data['ean']) . "', jan = '" . $this->db->escape($data['jan']) . "', isbn = '" . $this->db->escape($data['isbn']) . "', mpn = '" . $this->db->escape($data['mpn']) . "', location = '" . $this->db->escape($data['location']) . "', quantity = '" . (int)$data['quantity'] . "', minimum = '" . (int)$data['minimum'] . "', subtract = '" . (int)$data['subtract'] . "', stock_status_id = '" . (int)$data['stock_status_id'] . "', date_available = '" . $this->db->escape($data['date_available']) . "', manufacturer_id = '" . (int)$data['manufacturer_id'] . "', shipping = '" . (int)$data['shipping'] . "', price = '" . (float)$data['price'] . "', points = '" . (int)$data['points'] . "', weight = '" . (float)$data['weight'] . "', weight_class_id = '" . (int)$data['weight_class_id'] . "', length = '" . (float)$data['length'] . "', width = '" . (float)$data['width'] . "', height = '" . (float)$data['height'] . "', length_class_id = '" . (int)$data['length_class_id'] . "', status = '" . (int)$data['status'] . "', tax_class_id = '" . (int)$data['tax_class_id'] . "', sort_order = '" . (int)$data['sort_order'] . "', date_added = NOW()");
+		$this->db->query("INSERT INTO " . DB_PREFIX . "product SET model = '" . $this->db->escape($data['model']) . "', sku = '" . $this->db->escape($data['sku']) . "', upc = '" . $this->db->escape($data['upc']) . "', ean = '" . $this->db->escape($data['ean']) . "', jan = '" . $this->db->escape($data['jan']) . "', isbn = '" . $this->db->escape($data['isbn']) . "', mpn = '" . $this->db->escape($data['mpn']) . "', location = '" . $this->db->escape($data['location']) . "', quantity = '" . (int)$data['quantity'] . "', minimum = '" . (int)$data['minimum'] . "', subtract = '" . (int)$data['subtract'] . "', stock_status_id = '" . (int)$data['stock_status_id'] . "', date_available = '" . $this->db->escape($data['date_available']) . "', manufacturer_id = '" . (int)$data['manufacturer_id'] . "', shipping = '" . (int)$data['shipping'] . "', price = '" . (float)$data['price'] . "', points = '" . (int)$data['points'] . "', weight = '" . (float)$data['weight'] . "', weight_class_id = '" . (int)$data['weight_class_id'] . "', length = '" . (float)$data['length'] . "', width = '" . (float)$data['width'] . "', height = '" . (float)$data['height'] . "', length_class_id = '" . (int)$data['length_class_id'] . "', status = '" . (int)$data['status'] . "', tax_class_id = '" . (int)$data['tax_class_id'] . "', sort_order = '" . (int)$data['sort_order'] . "', date_added = NOW(), date_modified = NOW()");
 
 		$product_id = $this->db->getLastId();
 
@@ -112,10 +112,12 @@ class ModelCatalogProduct extends Model {
 		}
 		
 		// SEO URL
-		if (isset($data['product_seo'])) {
-			foreach ($data['product_seo'] as $product_seo) {
-				if ($product_seo['keyword']) {
-					$this->db->query("INSERT INTO " . DB_PREFIX . "seo_url SET store_id = '" . (int)$product_seo['store_id'] . "', language_id = '" . (int)$product_seo['language_id'] . "', query = 'product_id=" . (int)$product_id . "', keyword = '" . $this->db->escape($product_seo['keyword']) . "'");
+		if (isset($data['product_seo_url'])) {
+			foreach ($data['product_seo_url'] as $store_id => $language) {
+				foreach ($language as $language_id => $keyword) {
+					if (!empty($keyword)) {
+						$this->db->query("INSERT INTO " . DB_PREFIX . "seo_url SET store_id = '" . (int)$store_id . "', language_id = '" . (int)$language_id . "', query = 'product_id=" . (int)$product_id . "', keyword = '" . $this->db->escape($keyword) . "'");
+					}
 				}
 			}
 		}
@@ -270,10 +272,12 @@ class ModelCatalogProduct extends Model {
 		// SEO URL
 		$this->db->query("DELETE FROM " . DB_PREFIX . "seo_url WHERE query = 'product_id=" . (int)$product_id . "'");
 		
-		if (isset($data['product_seo'])) {
-			foreach ($data['product_seo'] as $product_seo) {
-				if ($product_seo['keyword']) {
-					$this->db->query("INSERT INTO " . DB_PREFIX . "seo_url SET store_id = '" . (int)$product_seo['store_id'] . "', language_id = '" . (int)$product_seo['language_id'] . "', query = 'product_id=" . (int)$product_id . "', keyword = '" . $this->db->escape($product_seo['keyword']) . "'");
+		if (isset($data['product_seo_url'])) {
+			foreach ($data['product_seo_url']as $store_id => $language) {
+				foreach ($language as $language_id => $keyword) {
+					if (!empty($keyword)) {
+						$this->db->query("INSERT INTO " . DB_PREFIX . "seo_url SET store_id = '" . (int)$store_id . "', language_id = '" . (int)$language_id . "', query = 'product_id=" . (int)$product_id . "', keyword = '" . $this->db->escape($keyword) . "'");
+					}
 				}
 			}
 		}
@@ -584,7 +588,19 @@ class ModelCatalogProduct extends Model {
 
 		return $product_store_data;
 	}
+	
+	public function getProductSeoUrls($product_id) {
+		$product_seo_url_data = array();
+		
+		$query = $this->db->query("SELECT * FROM " . DB_PREFIX . "seo_url WHERE query = 'product_id=" . (int)$product_id . "'");
 
+		foreach ($query->rows as $result) {
+			$product_seo_url_data[$result['store_id']][$result['language_id']] = $result['keyword'];
+		}
+
+		return $product_seo_url_data;
+	}
+	
 	public function getProductLayouts($product_id) {
 		$product_layout_data = array();
 

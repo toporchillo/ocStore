@@ -36,17 +36,18 @@ $_['mail_verp']            = false;
 $_['mail_parameter']       = '';
 
 // Cache
-$_['cache_engine']         = 'file'; // apc, file or mem
+$_['cache_engine']         = 'file'; // apc, file, mem or memcached
 $_['cache_expire']         = 3600;
 
 // Session
-$_['session_engine']       = 'file';
+$_['session_engine']       = 'db';
 $_['session_autostart']    = true;
 $_['session_name']         = 'OCSESSID';
 
 // Template
 $_['template_engine']      = 'twig';
 $_['template_directory']   = '';
+$_['template_cache']       = false;
 
 // Error
 $_['error_display']        = true;

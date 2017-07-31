@@ -89,6 +89,8 @@ class ModelUpgrade1009 extends Model {
 		// OPENCART_SERVER
 		$upgrade = true;
 		
+		$file = DIR_OPENCART . 'admin/config.php';
+		
 		$lines = file(DIR_OPENCART . 'admin/config.php');
 
 		foreach ($lines as $line) {
@@ -111,11 +113,59 @@ class ModelUpgrade1009 extends Model {
 				}
 			}
 
-			$file = fopen($file, 'w');
+			$handle = fopen($file, 'w');
 
-			fwrite($file, $output);
+			fwrite($handle, $output);
 
-			fclose($file);
-		}	
+			fclose($handle);
+		}
+	
+		$files = glob(DIR_OPENCART . '{config.php,admin/config.php}', GLOB_BRACE);
+
+		foreach ($files as $file) {
+			$lines = file($file);
+	
+			for ($i = 0; $i < count($lines); $i++) { 
+				if ((strpos($lines[$i], 'DIR_IMAGE') !== false) && (strpos($lines[$i + 1], 'DIR_STORAGE') === false)) {
+					array_splice($lines, $i + 1, 0, array('define(\'DIR_STORAGE\', DIR_SYSTEM . \'storage/\');'));
+				}
+
+				if ((strpos($lines[$i], 'DIR_MODIFICATION') !== false) && (strpos($lines[$i + 1], 'DIR_SESSION') === false)) {
+					array_splice($lines, $i + 1, 0, array('define(\'DIR_SESSION\', DIR_STORAGE . \'session/\');'));
+				}
+
+				if (strpos($lines[$i], 'DIR_CACHE') !== false) {
+					$lines[$i] = 'define(\'DIR_CACHE\', DIR_STORAGE . \'cache/\');' . "\n";
+				}
+
+				if (strpos($lines[$i], 'DIR_DOWNLOAD') !== false) {
+					$lines[$i] = 'define(\'DIR_DOWNLOAD\', DIR_STORAGE . \'download/\');' . "\n";
+				}
+
+				if (strpos($lines[$i], 'DIR_LOGS') !== false) {
+					$lines[$i] = 'define(\'DIR_LOGS\', DIR_STORAGE . \'logs/\');' . "\n";
+				}
+
+				if (strpos($lines[$i], 'DIR_MODIFICATION') !== false) {
+					$lines[$i] = 'define(\'DIR_MODIFICATION\', DIR_STORAGE . \'modification/\');' . "\n";
+				}
+				
+				if (strpos($lines[$i], 'DIR_SESSION') !== false) {
+					$lines[$i] = 'define(\'DIR_SESSION\', DIR_STORAGE . \'session/\');' . "\n";
+				}				
+	
+				if (strpos($lines[$i], 'DIR_UPLOAD') !== false) {
+					$lines[$i] = 'define(\'DIR_UPLOAD\', DIR_STORAGE . \'upload/\');' . "\n";
+				}
+			}
+			
+			$output = implode('', $lines);
+			
+			$handle = fopen($file, 'w');
+
+			fwrite($handle, $output);
+
+			fclose($handle);
+		}
 	}
 }
