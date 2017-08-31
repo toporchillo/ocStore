@@ -93,6 +93,7 @@ class ControllerToolUpgrade extends Controller {
 				$data['success'] = sprintf($this->language->get('text_success'), $response_info['version']);
 			} else {
 				$data['version'] = $response_info['version'];
+				$data['log'] = $response_info['log'];
 
 				$data['upgrade'] = true;
 
@@ -121,6 +122,7 @@ class ControllerToolUpgrade extends Controller {
 
 							$data['extensions'][] = array(
 								'name'       => $extension['name'],
+								'link'       => $this->url->link('marketplace/marketplace/info', 'user_token=' . $this->session->data['user_token'] . '&extension_id=' . $result['extension_id'], true),
 								'compatible' => $compatible,
 								'available'  => $available
 							);
@@ -139,7 +141,191 @@ class ControllerToolUpgrade extends Controller {
 		$this->response->setOutput($this->load->view('tool/upgrade', $data));
 	}
 
-	public function install() {
+	public function download() {
+		$this->load->language('tool/upgrade');
+		
+		$json = array();
+
+		if (isset($this->request->get['version'])) {
+			$version = $this->request->get['version'];
+		} else {
+			$version = '';
+		}
+
+		if (!$this->user->hasPermission('modify', 'tool/upgrade')) {
+			$json['error'] = $this->language->get('error_permission');
+		}
+
+        if (!$json) {
+			set_time_limit(0);
+
+			$curl = curl_init('https://github.com/opencart/opencart/archive/' . $version . '.zip');
+
+			$handle = fopen(DIR_DOWNLOAD . 'opencart-' . $version . '.zip', 'w');
+
+			curl_setopt($curl, CURLOPT_USERAGENT, 'OpenCart ' . VERSION);
+			curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, 0);
+			curl_setopt($curl, CURLOPT_FOLLOWLOCATION, 1);
+			curl_setopt($curl, CURLOPT_FORBID_REUSE, 1);
+			curl_setopt($curl, CURLOPT_FRESH_CONNECT, 1);
+			curl_setopt($curl, CURLOPT_TIMEOUT, 300);
+			curl_setopt($curl, CURLOPT_FILE, $handle);
+
+			curl_exec($curl);
+
+			fclose($handle);
+
+			$status = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+
+			curl_close($curl);
+
+			if ($status == 200) {
+				$json['text'] = $this->language->get('text_unzip');
+
+				$json['next'] = str_replace('&amp;', '&', $this->url->link('tool/upgrade/unzip', 'user_token=' . $this->session->data['user_token'] . '&version=' . $version));
+			} else {
+				$json['error'] = $this->language->get('error_download');
+			}
+		}
+
+		$this->response->addHeader('Content-Type: application/json');
+		$this->response->setOutput(json_encode($json));
+	}
+
+    public function unzip() {
+		$this->load->language('tool/upgrade');
+
+		$json = array();
+
+		if (isset($this->request->get['version'])) {
+			$version = $this->request->get['version'];
+		} else {
+			$version = '';
+		}
+
+		if (!$this->user->hasPermission('modify', 'tool/upgrade')) {
+			$json['error'] = $this->language->get('error_permission');
+		}
+
+		$file = DIR_DOWNLOAD . 'opencart-' . $version . '.zip';
+
+		if (!is_file($file)) {
+			$json['error'] = $this->language->get('error_file');
+		}
+
+		if (!$json) {
+			// Unzip the files
+			$zip = new ZipArchive();
+
+			if ($zip->open($file)) {
+				$zip->extractTo(DIR_DOWNLOAD . 'opencart-' . $version);
+				$zip->close();
+
+				$json['text'] = $this->language->get('text_move');
+
+				$json['next'] = str_replace('&amp;', '&', $this->url->link('tool/upgrade/move', 'user_token=' . $this->session->data['user_token'] . '&version=' . $version));
+			} else {
+				$json['error'] = $this->language->get('error_unzip');
+			}
+		}
+
+		$this->response->addHeader('Content-Type: application/json');
+		$this->response->setOutput(json_encode($json));
+	}
+
+	public function move() {
+		$this->load->language('tool/upgrade');
+
+		$json = array();
+
+		if (isset($this->request->get['version'])) {
+			$version = $this->request->get['version'];
+		} else {
+			$version = '';
+		}
+
+		if (!$this->user->hasPermission('modify', 'tool/upgrade')) {
+			$json['error'] = $this->language->get('error_permission');
+		}
+
+		$directory = DIR_DOWNLOAD . 'opencart-' . $version . '/opencart-' . $version . '/upload/';
+
+		if (!is_dir($directory)) {
+			$json['error'] = $this->language->get('error_directory');
+		}
+
+		if (!$json) {
+			$ignore = array(
+				'config-dist.php',
+				'admin/config-dist.php'
+			);
+
+			$files = array();
+
+			// Get a list of files ready to upload
+			$path = array($directory . '/*');
+
+			while (count($path) != 0) {
+				$next = array_shift($path);
+
+				foreach ((array)glob($next) as $file) {
+					if (is_dir($file)) {
+						$path[] = $file . '/*';
+					}
+
+					$files[] = $file;
+				}
+			}
+
+			foreach ($files as $file) {
+				$destination = str_replace('\\', '/', substr($file, strlen($directory . '/')));
+
+				$path = str_replace('\\', '/', realpath(DIR_CATALOG . '../')) . '/' . $destination;
+
+				// Check if the copy location exists or not
+				if (substr($destination, 0, 5) == 'admin') {
+					$path = DIR_APPLICATION . substr($destination, 6);
+				}
+
+				if (substr($destination, 0, 7) == 'catalog') {
+					$path = DIR_CATALOG . substr($destination, 8);
+				}
+
+				if (substr($destination, 0, 7) == 'install') {
+					$path = DIR_IMAGE . substr($destination, 8);
+				}
+
+				if (substr($destination, 0, 5) == 'image') {
+					$path = DIR_IMAGE . substr($destination, 6);
+				}
+
+				if (substr($destination, 0, 6) == 'system') {
+					$path = DIR_SYSTEM . substr($destination, 7);
+				}
+
+				if (is_dir($file) && !is_dir($path)) {
+					//if (!mkdir($path, 0777)) {
+					//	$json['error'] = sprintf($this->language->get('error_directory'), $destination);
+					//}
+				}
+
+				if (is_file($file)) {
+					//if (!rename($file, $path)) {
+					//	$json['error'] = sprintf($this->language->get('error_file'), $destination);
+					//}
+				}
+			}
+
+			$json['text'] = $this->language->get('text_remove');
+
+			$json['next'] = str_replace('&amp;', '&', $this->url->link('tool/upgrade/remove', 'user_token=' . $this->session->data['user_token'] . '&version=' . $version));
+		}
+
+		$this->response->addHeader('Content-Type: application/json');
+		$this->response->setOutput(json_encode($json));
+	}
+
+	public function remove() {
 		$this->load->language('tool/upgrade');
 
 		$json = array();
@@ -203,9 +389,9 @@ class ControllerToolUpgrade extends Controller {
 					}
 				}
 
-				$json['text'] = $this->language->get('text_download');
+				$json['text'] = $this->language->get('text_clear');
 
-				$json['next'] = str_replace('&amp;', '&', $this->url->link('tool/upgrade/download', 'user_token=' . $this->session->data['user_token'] . '&version=' . $version));
+				$json['next'] = str_replace('&amp;', '&', $this->url->link('tool/upgrade/clear', 'user_token=' . $this->session->data['user_token'] . '&version=' . $version));
 			} else {
 				$data['error'] = $this->language->get('error_connection');
 			}
@@ -213,181 +399,6 @@ class ControllerToolUpgrade extends Controller {
 
 		$this->response->addHeader('Content-Type: application/json');
 		$this->response->setOutput(json_encode($json));
-	}
-
-	public function download() {
-		$this->load->language('tool/upgrade');
-		
-		$json = array();
-
-		if (isset($this->request->get['version'])) {
-			$version = $this->request->get['version'];
-		} else {
-			$version = '';
-		}
-
-		if (!$this->user->hasPermission('modify', 'tool/upgrade')) {
-			$json['error'] = $this->language->get('error_permission');
-		}
-
-        if (!$json) {
-			set_time_limit(0);
-
-			$curl = curl_init('https://github.com/opencart/opencart/archive/' . $version . '.zip');
-
-			$handle = fopen(DIR_DOWNLOAD . $version . '.zip', 'w');
-
-			curl_setopt($curl, CURLOPT_USERAGENT, 'OpenCart ' . VERSION);
-			curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, 0);
-			curl_setopt($curl, CURLOPT_FOLLOWLOCATION, 1);
-			curl_setopt($curl, CURLOPT_FORBID_REUSE, 1);
-			curl_setopt($curl, CURLOPT_FRESH_CONNECT, 1);
-			curl_setopt($curl, CURLOPT_TIMEOUT, 300);
-			curl_setopt($curl, CURLOPT_FILE, $handle);
-
-			curl_exec($curl);
-
-			fclose($handle);
-
-			$status = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-
-			curl_close($curl);
-
-			if ($status == 200) {
-				$json['text'] = $this->language->get('text_unzip');
-
-				$json['next'] = str_replace('&amp;', '&', $this->url->link('tool/upgrade/unzip', 'user_token=' . $this->session->data['user_token'] . '&version=' . $version));
-			} else {
-				$json['error'] = $this->language->get('error_download');
-			}
-		}
-
-		$this->response->addHeader('Content-Type: application/json');
-		$this->response->setOutput(json_encode($json));
-	}
-
-    public function unzip() {
-		$this->load->language('tool/upgrade');
-
-		$json = array();
-
-		if (isset($this->request->get['version'])) {
-			$version = $this->request->get['version'];
-		} else {
-			$version = '';
-		}
-
-		if (!$this->user->hasPermission('modify', 'tool/upgrade')) {
-			$json['error'] = $this->language->get('error_permission');
-		}
-
-		$file = DIR_DOWNLOAD . $version . '.zip';
-
-		if (!is_file($file)) {
-			$json['error'] = $this->language->get('error_file');
-		}
-
-		if (!$json) {
-			// Unzip the files
-			$zip = new ZipArchive();
-
-			if ($zip->open($file)) {
-				$zip->extractTo(DIR_DOWNLOAD . $version);
-				$zip->close();
-
-				$json['text'] = $this->language->get('text_move');
-
-				$json['next'] = str_replace('&amp;', '&', $this->url->link('tool/upgrade/move', 'user_token=' . $this->session->data['user_token'] . '&version=' . $version));
-			} else {
-				$json['error'] = $this->language->get('error_unzip');
-			}
-		}
-
-		$this->response->addHeader('Content-Type: application/json');
-		$this->response->setOutput(json_encode($json));
-	}
-
-	public function move() {
-		$this->load->language('tool/upgrade');
-
-		$json = array();
-
-		if (isset($this->request->get['version'])) {
-			$version = $this->request->get['version'];
-		} else {
-			$version = '';
-		}
-
-		if (!$this->user->hasPermission('modify', 'tool/upgrade')) {
-			$json['error'] = $this->language->get('error_permission');
-		}
-
-		$directory = DIR_DOWNLOAD . $version . '/upload/';
-
-		if (!is_dir($directory)) {
-			$json['error'] = $this->language->get('error_directory');
-		}
-
-		if (!$json) {
-			$files = array();
-
-			// Get a list of files ready to upload
-			$path = array($directory . '/*');
-
-			while (count($path) != 0) {
-				$next = array_shift($path);
-
-				foreach ((array)glob($next) as $file) {
-					if (is_dir($file)) {
-						$path[] = $file . '/*';
-					}
-
-					$files[] = $file;
-				}
-			}
-
-			foreach ($files as $file) {
-				$destination = str_replace('\\', '/', substr($file, strlen($directory)));
-
-				$path = '';
-
-				// Check if the copy location exists or not
-				if (substr($destination, 0, 5) == 'admin') {
-					$path = DIR_APPLICATION . substr($destination, 6);
-				}
-
-				if (substr($destination, 0, 7) == 'catalog') {
-					$path = DIR_CATALOG . substr($destination, 8);
-				}
-
-				if (substr($destination, 0, 5) == 'image') {
-					$path = DIR_IMAGE . substr($destination, 6);
-				}
-
-				if (substr($destination, 0, 6) == 'system') {
-					$path = DIR_SYSTEM . substr($destination, 7);
-				}
-
-				if (is_dir($file) && !is_dir($path)) {
-					if (!mkdir($path, 0777)) {
-						$json['error'] = sprintf($this->language->get('error_directory'), $destination);
-					}
-				}
-
-				if (is_file($file)) {
-					if (!rename($file, $path)) {
-						$json['error'] = sprintf($this->language->get('error_file'), $destination);
-					}
-				}
-			}
-
-			$json['text'] = $this->language->get('text_clear');
-
-			$json['next'] = str_replace('&amp;', '&', $this->url->link('tool/upgrade/clear', 'user_token=' . $this->session->data['user_token'] . '&version=' . $version));
-		}
-
-		$this->response->addHeader('Content-Type: application/json');
-		$this->response->setOutput(json_encode($json));	
 	}
 
 	public function clear() {
@@ -406,7 +417,7 @@ class ControllerToolUpgrade extends Controller {
 		}
 
 		if (!$json) {
-			$directory = DIR_DOWNLOAD . $version . '/';
+			$directory = DIR_DOWNLOAD . 'opencart-' . $version . '/';
 
 			if (is_dir($directory)) {
 				// Get a list of files ready to upload
@@ -433,25 +444,24 @@ class ControllerToolUpgrade extends Controller {
 
 				foreach ($files as $file) {
 					if (is_file($file)) {
-						unlink($file);
+					//	unlink($file);
 					} elseif (is_dir($file)) {
-						rmdir($file);
+				//		rmdir($file);
 					}
 				}
 
 				if (is_dir($directory)) {
-					rmdir($directory);
+				//	rmdir($directory);
 				}
 			}
 
-			$file = DIR_DOWNLOAD . $version . '.zip';
+			$file = DIR_DOWNLOAD . 'opencart-' . $version . '.zip';
 
 			if (is_file($file)) {
-				unlink($file);
+			//	unlink($file);
 			}
 
-			$json['success'] = $this->language->get('text_success');
-
+			$json['success'] = sprintf($this->language->get('text_success'), VERSION);
 		}
 
 		$this->response->addHeader('Content-Type: application/json');
